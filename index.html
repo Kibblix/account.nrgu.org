@@ -89,8 +89,8 @@
             font-weight: 600;
         }
 
-        .card p.note {
-            margin: 0 0 16px;
+        .note {
+            margin: 0;
             font-size: 14px;
             color: var(--muted);
             line-height: 1.5;
@@ -109,14 +109,14 @@
         #name { font-size: 22px; font-weight: 600; margin: 0 0 4px; word-break: break-word; }
         #email { font-size: 14px; color: var(--muted); margin: 0 0 16px; word-break: break-all; }
 
-        #manage {
+        #manage, #create {
             font-size: 14px;
             color: var(--muted);
         }
 
-        #manage:hover { color: var(--text); }
+        #manage:hover, #create:hover { color: var(--text); }
 
-        .vote-row {
+        .poll-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -126,41 +126,24 @@
             text-align: left;
         }
 
-        .vote-row:first-child { border-top: none; }
+        .poll-row:first-child { border-top: none; }
 
-        .vote-name { font-size: 16px; font-weight: 600; }
+        .poll-q { font-size: 16px; font-weight: 600; word-break: break-word; }
+        .poll-stats { font-size: 13px; color: var(--muted); }
 
-        .vote-status { font-size: 14px; color: var(--muted); }
-        .vote-status.for { color: var(--blue); font-weight: 600; }
-        .vote-status.against { color: var(--red); font-weight: 600; }
-
-        .remove-btn {
+        .delete-btn {
+            flex: none;
             padding: 4px 8px;
             font-size: 13px;
-            color: var(--muted);
+            color: var(--red);
             background: none;
             border: none;
             text-decoration: underline;
             cursor: pointer;
         }
 
-        .remove-btn:hover:not(:disabled) { color: var(--text); }
-        .remove-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        .danger-btn {
-            padding: 10px 22px;
-            font-size: 15px;
-            font-weight: 600;
-            color: var(--red);
-            background: white;
-            border: 2px solid var(--red);
-            border-radius: 999px;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s;
-        }
-
-        .danger-btn:hover:not(:disabled) { background: var(--red); color: white; }
-        .danger-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .delete-btn:hover:not(:disabled) { opacity: 0.8; }
+        .delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         #msg {
             min-height: 20px;
@@ -187,7 +170,7 @@
 
     <main>
         <h1>Account</h1>
-        <p class="subtitle" id="subtitle">Sign in to see and manage your votes</p>
+        <p class="subtitle" id="subtitle">Sign in to manage your account and polls</p>
 
         <div id="signedOut" hidden>
             <button id="login" class="pill">Sign in with Google</button>
@@ -200,29 +183,28 @@
                 <p id="email"></p>
                 <a id="manage" href="https://myaccount.google.com" target="_blank" rel="noopener">Manage Google account</a>
             </div>
+
             <div class="card">
-                <h2>Delete account</h2>
-                <p class="note">
-                    Removes your votes and your login from the NRGU sites. Your Google account itself is not affected.
+                <h2>Your polls</h2>
+                <div id="polls"></div>
+                <p class="note" style="margin-top:16px">
+                    <a id="create" href="https://democracy.nrgu.org">Create a new poll</a>
                 </p>
-                <button id="delete" class="danger-btn">Delete my account</button>
             </div>
         </div>
 
         <div id="msg"></div>
 
         <small>
-            Your account is your Google account. We only store your votes, not your password.
+            Your account is your Google account. We only store your polls and votes, not your password.
         </small>
     </main>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import {
-            getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
-            reauthenticateWithPopup, deleteUser
-        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, getDoc, writeBatch, increment }
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+            from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, collection, doc, query, where, getDocs, deleteDoc }
             from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -239,22 +221,12 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // Keep in sync with the vote page and the Firestore rules.
-        const CANDIDATES = [
-            { id: "hamza", name: "Hamza" },
-            { id: "clara", name: "Clara" }
-        ];
-
         const $ = id => document.getElementById(id);
         const signedOutEl = $("signedOut");
         const signedInEl = $("signedIn");
-        const votesEl = $("votes");
+        const pollsEl = $("polls");
         const msgEl = $("msg");
         const topAuth = $("topAuth");
-        const deleteBtn = $("delete");
-
-        const field = choice => (choice === "for" ? "forVotes" : "againstVotes");
-        const voterRef = (candidateId, uid) => doc(db, "votes", candidateId, "voters", uid);
 
         function setMsg(text) { msgEl.textContent = text || ""; }
 
@@ -278,113 +250,71 @@
             $("back").textContent = "← Back to " + new URL(returnUrl).hostname;
         }
 
-        async function renderVotes(uid) {
-            votesEl.textContent = "Loading...";
-            const rows = [];
+        async function renderPolls(uid) {
+            pollsEl.textContent = "Loading...";
 
-            for (const { id, name } of CANDIDATES) {
-                let choice = null;
-                try {
-                    const snap = await getDoc(voterRef(id, uid));
-                    if (snap.exists()) choice = snap.data().choice;
-                } catch (e) {
-                    console.error(e);
-                    setMsg("Couldn't load your votes: " + (e.code || e.message));
-                }
-
-                const row = document.createElement("div");
-                row.className = "vote-row";
-
-                const left = document.createElement("div");
-                left.style.textAlign = "left";
-                const nameEl = document.createElement("div");
-                nameEl.className = "vote-name";
-                nameEl.textContent = name;
-                const status = document.createElement("div");
-                status.className = "vote-status" + (choice ? " " + choice : "");
-                status.textContent = choice
-                    ? "You voted " + (choice === "for" ? "For" : "Against")
-                    : "No vote";
-                left.append(nameEl, status);
-                row.append(left);
-
-                if (choice) {
-                    const btn = document.createElement("button");
-                    btn.className = "remove-btn";
-                    btn.textContent = "Remove vote";
-                    btn.onclick = () => removeVote(uid, id, choice, btn);
-                    row.append(btn);
-                }
-
-                rows.push(row);
-            }
-
-            votesEl.textContent = "";
-            votesEl.append(...rows);
-        }
-
-        async function removeVoteDocs(uid, candidateId, choice) {
-            const batch = writeBatch(db);
-            batch.delete(voterRef(candidateId, uid));
-            batch.update(doc(db, "votes", candidateId), { [field(choice)]: increment(-1) });
-            await batch.commit();
-        }
-
-        async function removeVote(uid, candidateId, choice, btn) {
-            btn.disabled = true;
-            setMsg("Removing...");
             try {
-                await removeVoteDocs(uid, candidateId, choice);
+                const snap = await getDocs(query(collection(db, "polls"), where("creatorUid", "==", uid)));
+
+                const docs = snap.docs.slice().sort((a, b) => {
+                    const ta = a.data().createdAt && a.data().createdAt.toMillis ? a.data().createdAt.toMillis() : 0;
+                    const tb = b.data().createdAt && b.data().createdAt.toMillis ? b.data().createdAt.toMillis() : 0;
+                    return tb - ta;
+                });
+
+                pollsEl.textContent = "";
+
+                if (!docs.length) {
+                    const p = document.createElement("p");
+                    p.className = "note";
+                    p.textContent = "You haven't created any polls yet.";
+                    pollsEl.append(p);
+                    return;
+                }
+
+                docs.forEach(d => {
+                    const data = d.data();
+
+                    const row = document.createElement("div");
+                    row.className = "poll-row";
+
+                    const left = document.createElement("div");
+                    const q = document.createElement("div");
+                    q.className = "poll-q";
+                    q.textContent = data.question;
+                    const stats = document.createElement("div");
+                    stats.className = "poll-stats";
+                    stats.textContent = `Yes ${data.yesVotes || 0} · No ${data.noVotes || 0}`;
+                    left.append(q, stats);
+
+                    const btn = document.createElement("button");
+                    btn.className = "delete-btn";
+                    btn.textContent = "Delete";
+                    btn.onclick = () => deletePoll(uid, d.id, btn);
+
+                    row.append(left, btn);
+                    pollsEl.append(row);
+                });
+            } catch (e) {
+                console.error(e);
+                pollsEl.textContent = "";
+                setMsg("Couldn't load your polls: " + (e.code || e.message));
+            }
+        }
+
+        async function deletePoll(uid, pollId, btn) {
+            if (!confirm("Delete this poll? This can't be undone.")) return;
+
+            btn.disabled = true;
+            setMsg("Deleting...");
+            try {
+                await deleteDoc(doc(db, "polls", pollId));
                 setMsg("");
-                await renderVotes(uid);
+                await renderPolls(uid);
             } catch (err) {
                 console.error(err);
                 btn.disabled = false;
-                setMsg("Couldn't remove vote: " + (err.code || err.message));
-            }
-        }
-
-        async function deleteAccount() {
-            const user = auth.currentUser;
-            if (!user) return;
-
-            if (!confirm("Delete your account? This removes your votes and your login from the NRGU sites. This can't be undone.")) {
-                return;
-            }
-
-            deleteBtn.disabled = true;
-            setMsg("Deleting...");
-
-            try {
-                // Firebase only allows deleting an account shortly after signing in.
-                const lastSignIn = new Date(user.metadata.lastSignInTime).getTime();
-                if (!lastSignIn || Date.now() - lastSignIn > 4 * 60 * 1000) {
-                    await reauthenticateWithPopup(user, new GoogleAuthProvider());
-                }
-
-                // Take back votes first so the totals stay correct.
-                for (const { id } of CANDIDATES) {
-                    const snap = await getDoc(voterRef(id, user.uid));
-                    if (snap.exists()) await removeVoteDocs(user.uid, id, snap.data().choice);
-                }
-
-                try {
-                    await deleteUser(user);
-                } catch (err) {
-                    if (err.code !== "auth/requires-recent-login") throw err;
-                    await reauthenticateWithPopup(user, new GoogleAuthProvider());
-                    await deleteUser(user);
-                }
-
-                setMsg("Your account was deleted.");
-            } catch (err) {
-                console.error(err);
-                deleteBtn.disabled = false;
-                if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") {
-                    setMsg("Cancelled.");
-                } else {
-                    setMsg("Couldn't delete account: " + (err.code || err.message));
-                }
+                setMsg("Couldn't delete poll: " + (err.code || err.message));
             }
         }
 
@@ -402,7 +332,6 @@
 
         $("login").onclick = signIn;
         topAuth.onclick = () => (auth.currentUser ? signOut(auth) : signIn());
-        deleteBtn.onclick = deleteAccount;
 
         onAuthStateChanged(auth, user => {
             topAuth.hidden = false;
@@ -411,15 +340,14 @@
                 topAuth.textContent = "Sign in";
                 signedInEl.hidden = true;
                 signedOutEl.hidden = false;
-                $("subtitle").textContent = "Sign in to see and manage your votes";
+                $("subtitle").textContent = "Sign in to manage your account and polls";
                 return;
             }
 
             topAuth.textContent = "Sign out";
             signedOutEl.hidden = true;
             signedInEl.hidden = false;
-            deleteBtn.disabled = false;
-            $("subtitle").textContent = "Manage your account and votes";
+            $("subtitle").textContent = "Manage your account and polls";
             setMsg("");
 
             const avatar = $("avatar");
@@ -432,7 +360,7 @@
             $("name").textContent = user.displayName || "Signed in";
             $("email").textContent = user.email || "";
 
-            renderVotes(user.uid);
+            renderPolls(user.uid);
         });
     </script>
 
