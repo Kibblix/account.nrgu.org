@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Account</title>
+
+    <style>
+        :root {
+            --blue: #1e6bff;
+            --red: #e03131;
+            --text: #222;
+            --muted: #888;
+            --line: #ececec;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background: white;
+            color: var(--text);
+            text-align: center;
+        }
+
+        #back {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 6px 0;
+            font-size: 14px;
+            color: var(--muted);
+            text-decoration: none;
+        }
+
+        #back:hover { color: var(--text); }
+
+        .pill {
+            padding: 10px 22px;
+            font-size: 15px;
+            font-weight: 600;
+            border-radius: 999px;
+            border: 1px solid #ddd;
+            background: white;
+            color: var(--text);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .pill:hover { background: #f6f6f6; }
+
+        #topAuth {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            padding: 7px 16px;
+            font-size: 14px;
+        }
+
+        main {
+            max-width: 520px;
+            margin: 100px auto 40px;
+        }
+
+        h1 {
+            font-size: 44px;
+            font-weight: 600;
+            margin: 0 0 10px;
+        }
+
+        .subtitle {
+            margin: 0 0 40px;
+            font-size: 14px;
+            color: var(--muted);
+        }
+
+        .card {
+            padding: 28px 24px;
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            margin-bottom: 24px;
+        }
+
+        .card h2 {
+            margin: 0 0 16px;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .card p.note {
+            margin: 0 0 16px;
+            font-size: 14px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        #avatar {
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 14px;
+            border-radius: 50%;
+            background: var(--line);
+            object-fit: cover;
+            display: block;
+        }
+
+        #name { font-size: 22px; font-weight: 600; margin: 0 0 4px; word-break: break-word; }
+        #email { font-size: 14px; color: var(--muted); margin: 0 0 16px; word-break: break-all; }
+
+        #manage {
+            font-size: 14px;
+            color: var(--muted);
+        }
+
+        #manage:hover { color: var(--text); }
+
+        .vote-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 0;
+            border-top: 1px solid var(--line);
+            text-align: left;
+        }
+
+        .vote-row:first-child { border-top: none; }
+
+        .vote-name { font-size: 16px; font-weight: 600; }
+
+        .vote-status { font-size: 14px; color: var(--muted); }
+        .vote-status.for { color: var(--blue); font-weight: 600; }
+        .vote-status.against { color: var(--red); font-weight: 600; }
+
+        .remove-btn {
+            padding: 4px 8px;
+            font-size: 13px;
+            color: var(--muted);
+            background: none;
+            border: none;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+        .remove-btn:hover:not(:disabled) { color: var(--text); }
+        .remove-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .danger-btn {
+            padding: 10px 22px;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--red);
+            background: white;
+            border: 2px solid var(--red);
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .danger-btn:hover:not(:disabled) { background: var(--red); color: white; }
+        .danger-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        #msg {
+            min-height: 20px;
+            margin-top: 12px;
+            font-size: 14px;
+            color: var(--muted);
+        }
+
+        small {
+            display: block;
+            margin-top: 24px;
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <a href="https://nrgu.org" id="back">← Back</a>
+    <button id="topAuth" class="pill" hidden>Sign in</button>
+
+    <main>
+        <h1>Account</h1>
+        <p class="subtitle" id="subtitle">Sign in to see and manage your votes</p>
+
+        <div id="signedOut" hidden>
+            <button id="login" class="pill">Sign in with Google</button>
+        </div>
+
+        <div id="signedIn" hidden>
+            <div class="card">
+                <img id="avatar" alt="" referrerpolicy="no-referrer">
+                <p id="name"></p>
+                <p id="email"></p>
+                <a id="manage" href="https://myaccount.google.com" target="_blank" rel="noopener">Manage Google account</a>
+            </div>
+
+            <div class="card">
+                <h2>Your votes</h2>
+                <div id="votes"></div>
+            </div>
+
+            <div class="card">
+                <h2>Delete account</h2>
+                <p class="note">
+                    Removes your votes and your login from the NRGU sites. Your Google account itself is not affected.
+                </p>
+                <button id="delete" class="danger-btn">Delete my account</button>
+            </div>
+        </div>
+
+        <div id="msg"></div>
+
+        <small>
+            Your account is your Google account. We only store your votes, not your password.
+        </small>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import {
+            getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+            reauthenticateWithPopup, deleteUser
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, getDoc, writeBatch, increment }
+            from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAIPtFw3b-BMaz6hpZfGOrm3Y_WGIG6d34",
+            authDomain: "my-base-6f65f.firebaseapp.com",
+            projectId: "my-base-6f65f",
+            storageBucket: "my-base-6f65f.firebasestorage.app",
+            messagingSenderId: "1032034958108",
+            appId: "1:1032034958108:web:baab1635dfb0e41ad758d9",
+            measurementId: "G-X9Z61B7GKV"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Keep in sync with the vote page and the Firestore rules.
+        const CANDIDATES = [
+            { id: "hamza", name: "Hamza" },
+            { id: "clara", name: "Clara" }
+        ];
+
+        const $ = id => document.getElementById(id);
+        const signedOutEl = $("signedOut");
+        const signedInEl = $("signedIn");
+        const votesEl = $("votes");
+        const msgEl = $("msg");
+        const topAuth = $("topAuth");
+        const deleteBtn = $("delete");
+
+        const field = choice => (choice === "for" ? "forVotes" : "againstVotes");
+        const voterRef = (candidateId, uid) => doc(db, "votes", candidateId, "voters", uid);
+
+        function setMsg(text) { msgEl.textContent = text || ""; }
+
+        // ?return=https://something.nrgu.org sends you back after signing in.
+        // Only https://nrgu.org and its subdomains are accepted.
+        function validReturn() {
+            const r = new URLSearchParams(location.search).get("return");
+            if (!r) return null;
+            try {
+                const u = new URL(r);
+                if (u.protocol === "https:" && (u.hostname === "nrgu.org" || u.hostname.endsWith(".nrgu.org"))) {
+                    return u.href;
+                }
+            } catch (e) { /* ignore */ }
+            return null;
+        }
+
+        const returnUrl = validReturn();
+        if (returnUrl) {
+            $("back").href = returnUrl;
+            $("back").textContent = "← Back to " + new URL(returnUrl).hostname;
+        }
+
+        async function renderVotes(uid) {
+            votesEl.textContent = "Loading...";
+            const rows = [];
+
+            for (const { id, name } of CANDIDATES) {
+                let choice = null;
+                try {
+                    const snap = await getDoc(voterRef(id, uid));
+                    if (snap.exists()) choice = snap.data().choice;
+                } catch (e) {
+                    console.error(e);
+                    setMsg("Couldn't load your votes: " + (e.code || e.message));
+                }
+
+                const row = document.createElement("div");
+                row.className = "vote-row";
+
+                const left = document.createElement("div");
+                left.style.textAlign = "left";
+                const nameEl = document.createElement("div");
+                nameEl.className = "vote-name";
+                nameEl.textContent = name;
+                const status = document.createElement("div");
+                status.className = "vote-status" + (choice ? " " + choice : "");
+                status.textContent = choice
+                    ? "You voted " + (choice === "for" ? "For" : "Against")
+                    : "No vote";
+                left.append(nameEl, status);
+                row.append(left);
+
+                if (choice) {
+                    const btn = document.createElement("button");
+                    btn.className = "remove-btn";
+                    btn.textContent = "Remove vote";
+                    btn.onclick = () => removeVote(uid, id, choice, btn);
+                    row.append(btn);
+                }
+
+                rows.push(row);
+            }
+
+            votesEl.textContent = "";
+            votesEl.append(...rows);
+        }
+
+        async function removeVoteDocs(uid, candidateId, choice) {
+            const batch = writeBatch(db);
+            batch.delete(voterRef(candidateId, uid));
+            batch.update(doc(db, "votes", candidateId), { [field(choice)]: increment(-1) });
+            await batch.commit();
+        }
+
+        async function removeVote(uid, candidateId, choice, btn) {
+            btn.disabled = true;
+            setMsg("Removing...");
+            try {
+                await removeVoteDocs(uid, candidateId, choice);
+                setMsg("");
+                await renderVotes(uid);
+            } catch (err) {
+                console.error(err);
+                btn.disabled = false;
+                setMsg("Couldn't remove vote: " + (err.code || err.message));
+            }
+        }
+
+        async function deleteAccount() {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            if (!confirm("Delete your account? This removes your votes and your login from the NRGU sites. This can't be undone.")) {
+                return;
+            }
+
+            deleteBtn.disabled = true;
+            setMsg("Deleting...");
+
+            try {
+                // Firebase only allows deleting an account shortly after signing in.
+                const lastSignIn = new Date(user.metadata.lastSignInTime).getTime();
+                if (!lastSignIn || Date.now() - lastSignIn > 4 * 60 * 1000) {
+                    await reauthenticateWithPopup(user, new GoogleAuthProvider());
+                }
+
+                // Take back votes first so the totals stay correct.
+                for (const { id } of CANDIDATES) {
+                    const snap = await getDoc(voterRef(id, user.uid));
+                    if (snap.exists()) await removeVoteDocs(user.uid, id, snap.data().choice);
+                }
+
+                try {
+                    await deleteUser(user);
+                } catch (err) {
+                    if (err.code !== "auth/requires-recent-login") throw err;
+                    await reauthenticateWithPopup(user, new GoogleAuthProvider());
+                    await deleteUser(user);
+                }
+
+                setMsg("Your account was deleted.");
+            } catch (err) {
+                console.error(err);
+                deleteBtn.disabled = false;
+                if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") {
+                    setMsg("Cancelled.");
+                } else {
+                    setMsg("Couldn't delete account: " + (err.code || err.message));
+                }
+            }
+        }
+
+        function signIn() {
+            setMsg("");
+            signInWithPopup(auth, new GoogleAuthProvider())
+                .then(() => { if (returnUrl) location.href = returnUrl; })
+                .catch(err => {
+                    console.error(err);
+                    if (err.code !== "auth/popup-closed-by-user" && err.code !== "auth/cancelled-popup-request") {
+                        setMsg("Couldn't sign in: " + (err.code || err.message));
+                    }
+                });
+        }
+
+        $("login").onclick = signIn;
+        topAuth.onclick = () => (auth.currentUser ? signOut(auth) : signIn());
+        deleteBtn.onclick = deleteAccount;
+
+        onAuthStateChanged(auth, user => {
+            topAuth.hidden = false;
+
+            if (!user) {
+                topAuth.textContent = "Sign in";
+                signedInEl.hidden = true;
+                signedOutEl.hidden = false;
+                $("subtitle").textContent = "Sign in to see and manage your votes";
+                return;
+            }
+
+            topAuth.textContent = "Sign out";
+            signedOutEl.hidden = true;
+            signedInEl.hidden = false;
+            deleteBtn.disabled = false;
+            $("subtitle").textContent = "Manage your account and votes";
+            setMsg("");
+
+            const avatar = $("avatar");
+            if (user.photoURL) {
+                avatar.src = user.photoURL;
+                avatar.hidden = false;
+            } else {
+                avatar.hidden = true;
+            }
+            $("name").textContent = user.displayName || "Signed in";
+            $("email").textContent = user.email || "";
+
+            renderVotes(user.uid);
+        });
+    </script>
+
+</body>
+</html>
