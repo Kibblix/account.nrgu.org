@@ -145,6 +145,52 @@
         .delete-btn:hover:not(:disabled) { opacity: 0.8; }
         .delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--blue);
+            border: 1px solid var(--blue);
+            border-radius: 999px;
+        }
+
+        .admin-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 0;
+            border-top: 1px solid var(--line);
+            text-align: left;
+            font-size: 14px;
+            word-break: break-all;
+        }
+
+        .admin-row:first-child { border-top: none; }
+
+        #adminForm {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        #adminEmail {
+            flex: 1 1 200px;
+            min-width: 0;
+            padding: 10px 14px;
+            font: inherit;
+            font-size: 16px;
+            color: var(--text);
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 14px;
+            outline: none;
+        }
+
+        #adminEmail:focus { border-color: var(--blue); }
+
         #msg {
             min-height: 20px;
             margin-top: 12px;
@@ -181,6 +227,7 @@
                 <img id="avatar" alt="" referrerpolicy="no-referrer">
                 <p id="name"></p>
                 <p id="email"></p>
+                <p id="role" hidden style="margin:0 0 16px"><span class="badge" id="roleText"></span></p>
                 <a id="manage" href="https://myaccount.google.com" target="_blank" rel="noopener">Manage Google account</a>
             </div>
 
@@ -190,6 +237,16 @@
                 <p class="note" style="margin-top:16px">
                     <a id="create" href="https://democracy.nrgu.org">Create a new poll</a>
                 </p>
+            </div>
+
+            <div class="card" id="adminCard" hidden>
+                <h2>Admins</h2>
+                <p class="note">Admins can delete any poll. Only you, the owner, can change this list.</p>
+                <div id="admins"></div>
+                <form id="adminForm">
+                    <input id="adminEmail" type="email" placeholder="Google email to add" autocomplete="off">
+                    <button id="adminAdd" class="pill" type="submit">Add admin</button>
+                </form>
             </div>
         </div>
 
@@ -204,7 +261,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
             from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, collection, doc, query, where, getDocs, deleteDoc }
+        import { getFirestore, collection, doc, query, where, getDocs, getDoc, setDoc, deleteDoc, serverTimestamp }
             from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -318,6 +375,118 @@
             }
         }
 
+        // ---------- Admin roles ----------
+        // Owner: set in the Firestore rules. Can read and change the admins list.
+        // Admin: an email listed in the "admins" collection. Can delete any poll.
+
+        let roleToken = 0;
+
+        function drawAdmins(emails) {
+            const el = $("admins");
+            el.textContent = "";
+
+            if (!emails.length) {
+                const p = document.createElement("p");
+                p.className = "note";
+                p.textContent = "No other admins yet.";
+                el.append(p);
+                return;
+            }
+
+            emails.forEach(email => {
+                const row = document.createElement("div");
+                row.className = "admin-row";
+
+                const label = document.createElement("span");
+                label.textContent = email;
+
+                const btn = document.createElement("button");
+                btn.className = "delete-btn";
+                btn.textContent = "Remove";
+                btn.onclick = () => removeAdmin(email, btn);
+
+                row.append(label, btn);
+                el.append(row);
+            });
+        }
+
+        async function refreshAdmins() {
+            try {
+                const snap = await getDocs(collection(db, "admins"));
+                drawAdmins(snap.docs.map(d => d.id).sort());
+            } catch (e) {
+                console.error(e);
+                setMsg("Couldn't load admins: " + (e.code || e.message));
+            }
+        }
+
+        async function loadRole() {
+            const token = ++roleToken;
+            $("role").hidden = true;
+            $("adminCard").hidden = true;
+
+            // Only the owner is allowed to read the admins list.
+            try {
+                const snap = await getDocs(collection(db, "admins"));
+                if (token !== roleToken) return;
+                $("roleText").textContent = "Owner";
+                $("role").hidden = false;
+                $("adminCard").hidden = false;
+                drawAdmins(snap.docs.map(d => d.id).sort());
+                return;
+            } catch (e) { /* not the owner */ }
+
+            // Only admins (and the owner) are allowed to read this document.
+            try {
+                await getDoc(doc(db, "admin", "check"));
+                if (token !== roleToken) return;
+                $("roleText").textContent = "Admin";
+                $("role").hidden = false;
+            } catch (e) { /* regular user */ }
+        }
+
+        $("adminForm").onsubmit = async e => {
+            e.preventDefault();
+
+            const input = $("adminEmail");
+            const addBtn = $("adminAdd");
+            const email = input.value.trim().toLowerCase();
+
+            if (!/^[^\s@\/]+@[^\s@\/]+\.[^\s@\/]+$/.test(email)) {
+                setMsg("Enter a valid email address.");
+                return;
+            }
+
+            addBtn.disabled = true;
+            setMsg("Adding...");
+            try {
+                await setDoc(doc(db, "admins", email), { email, addedAt: serverTimestamp() });
+                input.value = "";
+                setMsg("");
+                await refreshAdmins();
+            } catch (err) {
+                console.error(err);
+                setMsg("Couldn't add admin: " + (err.code || err.message));
+            }
+            addBtn.disabled = false;
+        };
+
+        async function removeAdmin(email, btn) {
+            if (!confirm("Remove " + email + " as admin?")) return;
+
+            btn.disabled = true;
+            setMsg("Removing...");
+            try {
+                await deleteDoc(doc(db, "admins", email));
+                setMsg("");
+                await refreshAdmins();
+            } catch (err) {
+                console.error(err);
+                btn.disabled = false;
+                setMsg("Couldn't remove admin: " + (err.code || err.message));
+            }
+        }
+
         function signIn() {
             setMsg("");
             signInWithPopup(auth, new GoogleAuthProvider())
@@ -338,6 +507,7 @@
 
             if (!user) {
                 topAuth.textContent = "Sign in";
+                roleToken++;
                 signedInEl.hidden = true;
                 signedOutEl.hidden = false;
                 $("subtitle").textContent = "Sign in to manage your account and polls";
@@ -361,6 +531,7 @@
             $("email").textContent = user.email || "";
 
             renderPolls(user.uid);
+            loadRole();
         });
     </script>
 
