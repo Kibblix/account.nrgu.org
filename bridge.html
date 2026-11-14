@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="robots" content="noindex">
+    <title>bridge</title>
+</head>
+<body>
+<script type="module">
+    // Tells the page that embeds this iframe (only *.nrgu.org) who is signed in.
+    // Only the display name and photo are shared, never the email or tokens.
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { initializeAuth, indexedDBLocalPersistence, onAuthStateChanged }
+        from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAIPtFw3b-BMaz6hpZfGOrm3Y_WGIG6d34",
+        authDomain: "my-base-6f65f.firebaseapp.com",
+        projectId: "my-base-6f65f",
+        storageBucket: "my-base-6f65f.firebasestorage.app",
+        messagingSenderId: "1032034958108",
+        appId: "1:1032034958108:web:baab1635dfb0e41ad758d9",
+        measurementId: "G-X9Z61B7GKV"
+    };
+
+    const ALLOWED = /^https:\/\/([a-z0-9-]+\.)*nrgu\.org$/;
+
+    function parentOrigin() {
+        try {
+            if (location.ancestorOrigins && location.ancestorOrigins.length) {
+                return location.ancestorOrigins[0];
+            }
+        } catch (e) { /* ignore */ }
+        try { return new URL(document.referrer).origin; } catch (e) { /* ignore */ }
+        return null;
+    }
+
+    const target = parentOrigin();
+
+    if (window.parent !== window && target && ALLOWED.test(target)) {
+        const app = initializeApp(firebaseConfig);
+        const auth = initializeAuth(app, { persistence: indexedDBLocalPersistence });
+
+        onAuthStateChanged(auth, user => {
+            window.parent.postMessage({
+                type: "nrgu-auth",
+                user: user ? { name: user.displayName || "", photoURL: user.photoURL || "" } : null
+            }, target);
+        });
+    }
+</script>
+</body>
+</html>
